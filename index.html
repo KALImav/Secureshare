@@ -1,1 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SecureShare</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,sans-serif;background:linear-gradient(135deg,#667eea,#764ba2,#f093fb,#4facfe);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px}
+.box{background:#fff;border-radius:20px;padding:30px;max-width:600px;width:100%}
+h1{text-align:center;color:#764ba2;margin-bottom:20px}
+.up{border:3px dashed #667eea;border-radius:15px;padding:30px;text-align:center;cursor:pointer;color:#667eea;font-weight:bold;margin-bottom:20px}
+.list{background:#f5f5f5;border-radius:15px;padding:15px;min-height:80px}
+.item{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#fff;padding:12px;border-radius:10px;margin-bottom:10px}
+.item span{word-break:break-all}
+button{padding:8px 14px;border:none;border-radius:8px;background:#667eea;color:#fff;cursor:pointer}
+.del{background:#ff6b6b}
+.empty{text-align:center;color:#999;padding:20px}
+</style>
+</head>
+<body>
+<div class="box">
+<h1>🔐 SecureShare</h1>
+<div class="up" onclick="document.getElementById('fileInput').click()">
+⬆️ Click to choose files
+<input type="file" id="fileInput" multiple style="display:none">
+</div>
+<div class="list" id="fileList"><div class="empty">Loading...</div></div>
+</div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const db = supabase.createClient("https://ikrgtifynbiywqfgvudy.supabase.co", "sb_publishable_OlWfYwqGZgiblAZ0byirQA_HsFGocrA");
+const BUCKET = "files";
+const clean = n => n.replace(/^\d+_/, '');
+
+async function loadFiles() {
+  const list = document.getElementById('fileList');
+  const { data, error } = await db.storage.from(BUCKET).list('', { sortBy: { column: 'created_at', order: 'desc' } });
+  if (error) { list.innerHTML = `<div class="empty">Error: ${error.message}</div>`; return; }
+  const items = data.filter(f => f.name !== '.emptyFolderPlaceholder');
+  if (!items.length) { list.innerHTML = '<div class="empty">No files yet</div>'; return; }
+  list.innerHTML = items.map(f => `
+    <div class="item">
+      <span>📄 ${clean(f.name)}</span>
+      <div>
+        <button onclick="download('${f.name}')">⬇️</button>
+        <button class="del" onclick="remove('${f.name}')">🗑️</button>
+      </div>
+    </div>`).join('');
+}
+
+document.getElementById('fileInput').addEventListener('change', async e => {
+  for (const file of e.target.files) {
+    const { error } = await db.storage.from(BUCKET).upload(`${Date.now()}_${file.name}`, file);
+    if (error) alert('Upload failed: ' + error.message);
+  }
+  e.target.value = '';
+  loadFiles();
+});
+
+async function download(name) {
+  const { data, error } = await db.storage.from(BUCKET).download(name);
+  if (error) { alert('Download failed: ' + error.message); return; }
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = clean(name);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function remove(name) {
+  await db.storage.from(BUCKET).remove([name]);
+  loadFiles();
+}
+
+loadFiles();
+</script>
+</body>
+</html>
